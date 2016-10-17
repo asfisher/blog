@@ -400,6 +400,7 @@ var Laya=window.Laya=(function(window,document){
 			this.bulletLevel=0;
 			this._roleBox=null;
 			this._infoPanel=null;
+			this._isGameOver=false;
 			this.hps=[1,2,10];
 			this.speeds=[3,2,1];
 			this.radius=[15,30,70];
@@ -417,20 +418,35 @@ var Laya=window.Laya=(function(window,document){
 			Laya.stage.addChild(this._roleBox);
 			this._infoPanel=new GameInfo();
 			Laya.stage.addChild(this._infoPanel);
-			this._hero=new Role();
-			this._hero.init("hero",0,5,0,30);
-			this._roleBox.addChild(this._hero);
-			this._hero.pos(200,700);
-			this._hero.shootType=1;
 			Laya.stage.on("mousemove",this,this.onMouseMove);
+			this._infoPanel.on("stopGame",this,this.stopGame);
+			this._infoPanel.on("resume",this,this.resume);
 			this.restart();
 		}
 
 		__proto.restart=function(){
 			Laya.timer.clear(this,this.onLoop);
+			for (var i=this._roleBox.numChildren-1;i >-1;i--){
+				var role=this._roleBox.getChildAt(i);
+				if (role){
+					role.removeSelf();
+					role.visible=true;
+					Pool.recover("role",role);
+				}
+			}
+			this._isGameOver=false;
+			this._hero=Pool.getItemByClass("role",Role);
+			this._hero.init("hero",0,5,0,30);
+			this._roleBox.addChild(this._hero);
+			this._hero.pos(200,700);
+			this._hero.shootType=1;
 			this.level=0;
 			this.score=0;
 			this.bulletLevel=0;
+			this._infoPanel.infoLabel.text="";
+			this._infoPanel.level=this.level;
+			this._infoPanel.score=this.score;
+			this._infoPanel.hp=this._hero.hp;
 			Laya.timer.frameLoop(1,this,this.onLoop);
 		}
 
@@ -457,6 +473,7 @@ var Laya=window.Laya=(function(window,document){
 				if (role.shootType > 0){
 					var time=Browser.now();
 					if (time > role.shootTime){
+						SoundManager.playSound("res/sound/bullet.mp3");
 						role.shootTime=time+role.shootInterval;
 						var pos=this.bulletPos[role.shootType-1];
 						for (var index=0;index < pos.length;index++){
@@ -481,16 +498,19 @@ var Laya=window.Laya=(function(window,document){
 							this.lostHp(role1,1);
 							this.lostHp(role2,1);
 							this.score++;
+							this._infoPanel.score=this.score;
 							if (this.score > this.levelUpScore){
 								this.level++;
 								this.levelUpScore+=this.level *5;
+								this._infoPanel.level=this.level;
 							}
 						}
 					}
 				}
 			}
+			this._infoPanel.hp=this._hero.hp;
 			if (this._hero.hp < 1){
-				Laya.timer.clear(this,this.onLoop);
+				this.gameOver();
 			};
 			var cutTime=this.level < 30 ? this.level *2 :60;
 			var speedUp=Math.floor(this.level / 6);
@@ -514,16 +534,19 @@ var Laya=window.Laya=(function(window,document){
 				this._hero.shootType=Math.min(Math.floor(this.bulletLevel / 2)+1,4);
 				this._hero.shootInterval=500-20 *(this.bulletLevel > 20 ? 20 :this.bulletLevel);
 				role.visible=false;
+				SoundManager.playSound("res/sound/achievement.mp3")
 				}else if (role.heroType===3){
 				this._hero.hp++;
 				if (this._hero.hp > 10)this._hero.hp=10;
 				role.visible=false;
+				SoundManager.playSound("res/sound/achievement.mp3")
 				}else if (role.hp > 0){
 				role.playAction("hit");
 				}else {
 				if (role.heroType > 0){
 					role.visible=false;
 					}else {
+					SoundManager.playSound("res/sound/"+role.type+"_down.mp3")
 					role.playAction("down");
 					if (role.type=="enemy3"){
 						var type=Math.random()< 0.7 ? 2 :3;
@@ -542,6 +565,26 @@ var Laya=window.Laya=(function(window,document){
 
 		__proto.onProgress=function(progress){
 			console.log(progress);
+		}
+
+		__proto.stopGame=function(e){
+			Laya.timer.clear(this,this.onLoop);
+		}
+
+		__proto.resume=function(e){
+			Laya.timer.frameLoop(1,this,this.onLoop);
+		}
+
+		__proto.gameOver=function(){
+			SoundManager.playSound("res/sound/game_over.mp3");
+			this._infoPanel.infoLabel.text="GameOver,分数:"+this.score+"点击这里重新开始";
+			this._isGameOver=true;
+			Laya.timer.clear(this,this.onLoop);
+			this._infoPanel.infoLabel.once("click",this,this.clickStart);
+		}
+
+		__proto.clickStart=function(e){
+			this.restart();
 		}
 
 		return Game;
@@ -30303,7 +30346,7 @@ var Laya=window.Laya=(function(window,document){
 		}
 
 		__static(GameInfoUI,
-		['uiView',function(){return this.uiView={"type":"View","props":{"width":480,"height":852},"child":[{"type":"Button","props":{"y":8,"x":411,"var":"pasueBtn","stateNum":"1","skin":"war/btn_pause.png"}},{"type":"Label","props":{"y":16,"x":19,"var":"hpLabel","text":"Hp:10","fontSize":30,"color":"#149237"}},{"type":"Label","props":{"y":15,"x":120,"var":"levelLabel","text":"Level:50","fontSize":30,"color":"#dbfde4"}},{"type":"Label","props":{"y":15,"x":258,"var":"scoreLabel","text":"Score:10","fontSize":30,"color":"#f5fd45"}},{"type":"Label","props":{"y":193,"x":38,"width":402,"var":"infoLabel","text":"label","height":172,"fontSize":30,"color":"#fdffd4","align":"center"}}]};}
+		['uiView',function(){return this.uiView={"type":"View","props":{"width":480,"height":852},"child":[{"type":"Button","props":{"y":8,"x":411,"var":"pasueBtn","stateNum":"1","skin":"war/btn_pause.png"}},{"type":"Label","props":{"y":16,"x":19,"var":"hpLabel","text":"Hp:10","fontSize":30,"color":"#149237"}},{"type":"Label","props":{"y":15,"x":120,"var":"levelLabel","text":"Level:50","fontSize":30,"color":"#dbfde4"}},{"type":"Label","props":{"y":15,"x":258,"var":"scoreLabel","text":"Score:10","fontSize":30,"color":"#f5fd45"}},{"type":"Label","props":{"y":193,"x":38,"wordWrap":true,"width":402,"var":"infoLabel","text":"11111111111111111111111111111111111111111111","height":172,"fontSize":30,"color":"#fdffd4","align":"center"}}]};}
 		]);
 		return GameInfoUI;
 	})(View)
@@ -30838,6 +30881,7 @@ var Laya=window.Laya=(function(window,document){
 	var GameInfo=(function(_super){
 		function GameInfo(){
 			GameInfo.__super.call(this);
+			this.infoLabel.text="";
 			this.pasueBtn.on("click",this,this.onPauseBtnClick);
 		}
 
@@ -30881,7 +30925,7 @@ var Laya=window.Laya=(function(window,document){
 	})(GameInfoUI)
 
 
-	Laya.__init([EventDispatcher,Render,LoaderManager,WebGLContext,View,WebGLContext2D,LocalStorage,RenderTargetMAX,Browser,Timer,AtlasGrid,DrawText,ShaderCompile]);
+	Laya.__init([EventDispatcher,Render,LoaderManager,WebGLContext,View,WebGLContext2D,LocalStorage,RenderTargetMAX,Timer,Browser,AtlasGrid,DrawText,ShaderCompile]);
 	new Game();
 
 })(window,document,Laya);
